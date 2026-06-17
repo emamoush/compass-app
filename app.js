@@ -1,4 +1,4 @@
-import { supabase, signIn, signOut, getUserRole, onAuthChange } from './supabase.js'
+import { supabase, signIn, signOut, getUserRole } from './supabase.js'
 import { toast, ROLE_LABELS } from './utils.js'
 import { renderDashboard } from './modules/dashboard.js'
 import { renderTesoreria } from './modules/tesoreria.js'
@@ -12,6 +12,35 @@ import { renderUsuarios } from './modules/usuarios.js'
 // ── GLOBAL STATE ──
 export let currentUser = null
 export let currentRole = null
+
+// ── INIT: verificar sesión existente al cargar ──
+async function checkSession() {
+  console.log('Checking existing session...')
+  const { data: { session } } = await supabase.auth.getSession()
+  console.log('Session:', session?.user?.email || 'none')
+  if (session) {
+    await loadUserAndInit(session)
+  } else {
+    showLogin()
+  }
+}
+
+async function loadUserAndInit(session) {
+  try {
+    console.log('Loading profile for:', session.user.id)
+    const profile = await getUserRole(session.user.id)
+    console.log('Profile:', profile)
+    currentUser = session.user
+    currentRole = profile?.role || 'reader'
+    console.log('Role:', currentRole)
+    initApp(profile)
+  } catch (e) {
+    console.error('Error loading profile:', e)
+    currentUser = session.user
+    currentRole = 'reader'
+    initApp(null)
+  }
+}
 
 // ── LOGIN ──
 document.getElementById('login-btn').addEventListener('click', handleLogin)
@@ -28,7 +57,11 @@ async function handleLogin() {
   btn.disabled = true
   btn.textContent = 'Ingresando...'
   try {
-    await signIn(email, password)
+    console.log('Signing in...')
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password })
+    if (error) throw error
+    console.log('Sign in OK, loading session...')
+    await loadUserAndInit(data.session)
   } catch (e) {
     console.error('Login error:', e)
     err.textContent = 'Correo o contraseña incorrectos.'
@@ -38,32 +71,9 @@ async function handleLogin() {
   }
 }
 
-// ── AUTH STATE ──
-onAuthChange(async (event, session) => {
-  console.log('Auth event:', event, 'Session:', session?.user?.email)
-  if (session) {
-    try {
-      const profile = await getUserRole(session.user.id)
-      console.log('Profile loaded:', profile)
-      currentUser = session.user
-      currentRole = profile?.role || 'reader'
-      console.log('Role set to:', currentRole)
-      initApp(profile)
-    } catch (e) {
-      console.error('Error loading profile:', e)
-      currentUser = session.user
-      currentRole = 'reader'
-      initApp(null)
-    }
-  } else {
-    currentUser = null
-    currentRole = null
-    showLogin()
-  }
-})
-
 function initApp(profile) {
   try {
+    console.log('Initializing app...')
     document.getElementById('login-screen').classList.add('hide')
     setTimeout(() => {
       document.getElementById('login-screen').style.display = 'none'
@@ -87,6 +97,7 @@ function initApp(profile) {
     })
 
     navigate('dashboard')
+    console.log('App initialized OK')
   } catch (e) {
     console.error('Error in initApp:', e)
   }
@@ -105,7 +116,8 @@ function showLogin() {
 
 // ── LOGOUT ──
 document.getElementById('btn-logout').addEventListener('click', async () => {
-  await signOut()
+  await supabase.auth.signOut()
+  showLogin()
 })
 
 // ── NAVIGATION ──
@@ -156,3 +168,6 @@ document.getElementById('modal-overlay').addEventListener('click', e => {
 document.getElementById('modal-close-btn').addEventListener('click', () => {
   document.getElementById('modal-overlay').classList.remove('open')
 })
+
+// ── ARRANCAR ──
+checkSession()
