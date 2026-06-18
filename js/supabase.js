@@ -5,7 +5,6 @@ const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 
 export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
 
-// ── AUTH HELPERS ──
 export async function signIn(email, password) {
   const { data, error } = await supabase.auth.signInWithPassword({ email, password })
   if (error) throw error
@@ -27,7 +26,16 @@ export async function getCurrentUser() {
   return data.user
 }
 
-// Auth state listener
+export async function getUserRole(userId) {
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('role, full_name')
+    .eq('id', userId)
+    .single()
+  if (error) return null
+  return data
+}
+
 export function onAuthChange(callback) {
   return supabase.auth.onAuthStateChange(callback)
 }
