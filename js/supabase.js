@@ -27,29 +27,6 @@ export async function getCurrentUser() {
   return data.user
 }
 
-// Get user role from profiles table — con debug visual
-export async function getUserRole(userId) {
-  const { data, error } = await supabase
-    .from('profiles')
-    .select('role, full_name')
-    .eq('id', userId)
-    .single()
-
-  // DEBUG: mostrar resultado en pantalla
-  const msg = `getUserRole(${userId.slice(0,8)}...)\ndata: ${JSON.stringify(data)}\nerror: ${JSON.stringify(error)}`
-  let dbg = document.getElementById('__debug')
-  if (!dbg) {
-    dbg = document.createElement('div')
-    dbg.id = '__debug'
-    dbg.style.cssText = 'position:fixed;bottom:10px;right:10px;background:#1a1a2e;color:#00C2A0;padding:12px 16px;border-radius:8px;font-size:11px;font-family:monospace;z-index:99999;max-width:400px;white-space:pre-wrap;border:1px solid #00C2A0'
-    document.body.appendChild(dbg)
-  }
-  dbg.textContent = msg
-
-  if (error) return null
-  return data
-}
-
 // Auth state listener
 export function onAuthChange(callback) {
   return supabase.auth.onAuthStateChange(callback)
