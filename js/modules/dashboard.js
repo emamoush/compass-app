@@ -1,6 +1,5 @@
 import { supabase } from '../supabase.js'
 import { fmt, fmtDate, canEdit } from '../utils.js'
-import { navigate } from '../app.js'
 
 export async function renderDashboard(role) {
   const cont = document.getElementById('view-dashboard')
