@@ -103,7 +103,7 @@ async function renderTesoContent() {
 
   attachMonthHandlers(renderTesoContent)
   document.getElementById('btn-new-mov')?.addEventListener('click', () => openMovModal(cuenta))
-  attachDeleteHandlers('movimientos', renderTesoContent)
+  attachRowHandlers(list, cuenta)
 }
 
 function renderMovsTable(list, divisa) {
@@ -116,7 +116,10 @@ function renderMovsTable(list, divisa) {
       ${m.tipo === 'credito' ? '+' : '−'}${fmt(m.importe, divisa)}
     </td>
     <td><span class="tag tag-gray">${m.categoria || 'General'}</span></td>
-    ${canEdit(currentRole) ? `<td><button class="btn btn-danger btn-sm delete-row" data-id="${m.id}" data-table="movimientos"><i class="ti ti-trash"></i></button></td>` : ''}
+    ${canEdit(currentRole) ? `<td style="white-space:nowrap">
+      <button class="btn btn-ghost btn-sm edit-mov" data-id="${m.id}"><i class="ti ti-pencil"></i></button>
+      <button class="btn btn-danger btn-sm delete-row" data-id="${m.id}" data-table="movimientos"><i class="ti ti-trash"></i></button>
+    </td>` : ''}
   </tr>`).join('')
 }
 
@@ -154,13 +157,22 @@ async function renderTarjetas(cont) {
       <tbody>${list.length ? list.map(m => `<tr>
         <td>${fmtDate(m.fecha)}</td><td>${m.tarjeta || '—'}</td><td>${m.concepto || '—'}</td>
         <td style="font-weight:600;color:var(--amber)">${fmt(m.importe)}</td>
-        ${canEdit(currentRole) ? `<td><button class="btn btn-danger btn-sm delete-row" data-id="${m.id}" data-table="tarjetas_movimientos"><i class="ti ti-trash"></i></button></td>` : ''}
+        ${canEdit(currentRole) ? `<td style="white-space:nowrap">
+          <button class="btn btn-ghost btn-sm edit-tarjeta" data-id="${m.id}"><i class="ti ti-pencil"></i></button>
+          <button class="btn btn-danger btn-sm delete-row" data-id="${m.id}" data-table="tarjetas_movimientos"><i class="ti ti-trash"></i></button>
+        </td>` : ''}
       </tr>`).join('') : `<tr><td colspan="5" style="text-align:center;color:var(--text3);padding:24px">Sin movimientos</td></tr>`}
       </tbody></table></div>
     </div>`
 
   attachMonthHandlers(renderTesoContent)
   document.getElementById('btn-new-tarjeta')?.addEventListener('click', () => openTarjetaModal())
+  document.querySelectorAll('.edit-tarjeta').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const item = list.find(m => m.id === btn.dataset.id)
+      if (item) openTarjetaModal(item)
+    })
+  })
   attachDeleteHandlers('tarjetas_movimientos', renderTesoContent)
 }
 
@@ -183,18 +195,22 @@ function renderExtractos(cont) {
 }
 
 // ── MODAL MOVIMIENTO ──
-function openMovModal(cuenta) {
-  document.getElementById('modal-title').textContent = `Nuevo Movimiento — ${CUENTA_LABELS[currentTab]}`
+function openMovModal(cuenta, item = null) {
+  const isEdit = !!item
+  document.getElementById('modal-title').textContent = isEdit ? `Editar Movimiento — ${CUENTA_LABELS[currentTab]}` : `Nuevo Movimiento — ${CUENTA_LABELS[currentTab]}`
   document.getElementById('modal-body').innerHTML = `
     <div class="form-grid">
-      <div class="form-field"><label>Fecha</label><input type="date" id="mov-fecha" value="${today()}"></div>
-      <div class="form-field"><label>Concepto</label><input type="text" id="mov-concepto" placeholder="Descripción del movimiento"></div>
+      <div class="form-field"><label>Fecha</label><input type="date" id="mov-fecha" value="${item?.fecha || today()}"></div>
+      <div class="form-field"><label>Concepto</label><input type="text" id="mov-concepto" placeholder="Descripción del movimiento" value="${item?.concepto || ''}"></div>
       <div class="form-field"><label>Tipo</label>
-        <select id="mov-tipo"><option value="credito">Crédito (Ingreso)</option><option value="debito">Débito (Egreso)</option></select>
+        <select id="mov-tipo">
+          <option value="credito" ${item?.tipo === 'credito' ? 'selected' : ''}>Crédito (Ingreso)</option>
+          <option value="debito" ${item?.tipo === 'debito' ? 'selected' : ''}>Débito (Egreso)</option>
+        </select>
       </div>
-      <div class="form-field"><label>Importe</label><input type="number" id="mov-importe" placeholder="0.00" step="0.01" min="0"></div>
+      <div class="form-field"><label>Importe</label><input type="number" id="mov-importe" placeholder="0.00" step="0.01" min="0" value="${item?.importe ?? ''}"></div>
       <div class="form-field"><label>Categoría</label>
-        <select id="mov-cat">${CATEGORIAS_BANCARIAS.map(c => `<option>${c}</option>`).join('')}</select>
+        <select id="mov-cat">${CATEGORIAS_BANCARIAS.map(c => `<option ${item?.categoria === c ? 'selected' : ''}>${c}</option>`).join('')}</select>
       </div>
     </div>
     <div class="form-actions">
@@ -209,26 +225,30 @@ function openMovModal(cuenta) {
     const importe = parseFloat(document.getElementById('mov-importe').value) || 0
     const categoria = document.getElementById('mov-cat').value
     if (!fecha || !importe) { toast('Completá fecha e importe', true); return }
-    const { error } = await supabase.from('movimientos').insert({
+    const payload = {
       cuenta_id: cuenta?.id, fecha, concepto, tipo, importe, categoria,
       divisa: currentTab === 'cc-dolares' ? 'USD' : 'ARS',
       mes: currentMonth, anio: currentYear
-    })
+    }
+    const { error } = isEdit
+      ? await supabase.from('movimientos').update(payload).eq('id', item.id)
+      : await supabase.from('movimientos').insert(payload)
     if (error) { toast('Error al guardar', true); return }
     closeModal()
-    toast('Movimiento guardado ✓')
+    toast(isEdit ? 'Movimiento actualizado ✓' : 'Movimiento guardado ✓')
     renderTesoContent()
   })
 }
 
-function openTarjetaModal() {
-  document.getElementById('modal-title').textContent = 'Nueva Conciliación de Tarjeta'
+function openTarjetaModal(item = null) {
+  const isEdit = !!item
+  document.getElementById('modal-title').textContent = isEdit ? 'Editar Conciliación de Tarjeta' : 'Nueva Conciliación de Tarjeta'
   document.getElementById('modal-body').innerHTML = `
     <div class="form-grid">
-      <div class="form-field"><label>Fecha</label><input type="date" id="tar-fecha" value="${today()}"></div>
-      <div class="form-field"><label>Tarjeta</label><input type="text" id="tar-tarjeta" placeholder="Ej: Visa Macro 1234"></div>
-      <div class="form-field"><label>Concepto</label><input type="text" id="tar-concepto" placeholder="Descripción"></div>
-      <div class="form-field"><label>Importe</label><input type="number" id="tar-importe" placeholder="0.00" step="0.01" min="0"></div>
+      <div class="form-field"><label>Fecha</label><input type="date" id="tar-fecha" value="${item?.fecha || today()}"></div>
+      <div class="form-field"><label>Tarjeta</label><input type="text" id="tar-tarjeta" placeholder="Ej: Visa Macro 1234" value="${item?.tarjeta || ''}"></div>
+      <div class="form-field"><label>Concepto</label><input type="text" id="tar-concepto" placeholder="Descripción" value="${item?.concepto || ''}"></div>
+      <div class="form-field"><label>Importe</label><input type="number" id="tar-importe" placeholder="0.00" step="0.01" min="0" value="${item?.importe ?? ''}"></div>
     </div>
     <div class="form-actions">
       <button class="btn btn-teal" id="save-tar-btn"><i class="ti ti-check"></i> Guardar</button>
@@ -241,9 +261,12 @@ function openTarjetaModal() {
     const concepto = document.getElementById('tar-concepto').value
     const importe = parseFloat(document.getElementById('tar-importe').value) || 0
     if (!fecha || !importe) { toast('Completá fecha e importe', true); return }
-    const { error } = await supabase.from('tarjetas_movimientos').insert({ fecha, tarjeta, concepto, importe, mes: currentMonth, anio: currentYear })
+    const payload = { fecha, tarjeta, concepto, importe, mes: currentMonth, anio: currentYear }
+    const { error } = isEdit
+      ? await supabase.from('tarjetas_movimientos').update(payload).eq('id', item.id)
+      : await supabase.from('tarjetas_movimientos').insert(payload)
     if (error) { toast('Error al guardar', true); return }
-    closeModal(); toast('Conciliación guardada ✓'); renderTesoContent()
+    closeModal(); toast(isEdit ? 'Conciliación actualizada ✓' : 'Conciliación guardada ✓'); renderTesoContent()
   })
 }
 
@@ -296,6 +319,16 @@ function attachMonthHandlers(cb) {
   document.querySelectorAll('.month-btn').forEach(btn => {
     btn.addEventListener('click', () => { currentMonth = parseInt(btn.dataset.m); cb() })
   })
+}
+
+function attachRowHandlers(list, cuenta) {
+  document.querySelectorAll('.edit-mov').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const item = list.find(m => m.id === btn.dataset.id)
+      if (item) openMovModal(cuenta, item)
+    })
+  })
+  attachDeleteHandlers('movimientos', renderTesoContent)
 }
 
 function attachDeleteHandlers(table, cb) {

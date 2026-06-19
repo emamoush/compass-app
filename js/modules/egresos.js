@@ -58,11 +58,14 @@ function renderTable(list) {
       ? `<button class="abonado-btn ${m.abonado ? 'done' : ''} toggle-egr" data-id="${m.id}" data-val="${m.abonado}">${m.abonado ? '✓ Abonado' : 'Marcar abonado'}</button>`
       : `<span class="tag ${m.abonado ? 'tag-green' : 'tag-amber'}">${m.abonado ? 'Abonado' : 'Pendiente'}</span>`
     }</td>
-    ${canEdit(currentRole) ? `<td><button class="btn btn-danger btn-sm delete-egr" data-id="${m.id}"><i class="ti ti-trash"></i></button></td>` : ''}
+    ${canEdit(currentRole) ? `<td style="white-space:nowrap">
+      <button class="btn btn-ghost btn-sm edit-egr" data-id="${m.id}"><i class="ti ti-pencil"></i></button>
+      <button class="btn btn-danger btn-sm delete-egr" data-id="${m.id}"><i class="ti ti-trash"></i></button>
+    </td>` : ''}
   </tr>`).join('')
 }
 
-function attachHandlers() {
+function attachHandlers(list) {
   document.querySelectorAll('.toggle-egr').forEach(btn => {
     btn.addEventListener('click', async () => {
       const newVal = btn.dataset.val === 'true' ? false : true
@@ -70,6 +73,12 @@ function attachHandlers() {
       if (error) { toast('Error al actualizar', true); return }
       toast(newVal ? 'Marcado como abonado ✓' : 'Marcado como pendiente')
       renderEgresosContent()
+    })
+  })
+  document.querySelectorAll('.edit-egr').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const item = list.find(m => m.id === btn.dataset.id)
+      if (item) openEgrModal(item)
     })
   })
   document.querySelectorAll('.delete-egr').forEach(btn => {
@@ -82,17 +91,25 @@ function attachHandlers() {
   })
 }
 
-function openEgrModal() {
-  document.getElementById('modal-title').textContent = 'Nuevo Egreso / No Proveedor'
+function openEgrModal(item = null) {
+  const isEdit = !!item
+  document.getElementById('modal-title').textContent = isEdit ? 'Editar Egreso / No Proveedor' : 'Nuevo Egreso / No Proveedor'
   document.getElementById('modal-body').innerHTML = `
     <div class="form-grid">
-      <div class="form-field"><label>Individuo / Entidad</label><input type="text" id="egr-ent" placeholder="Nombre o razón social"></div>
-      <div class="form-field"><label>Nro. Comprobante</label><input type="text" id="egr-comp" placeholder="Factura, recibo, VEP, etc."></div>
-      <div class="form-field"><label>Concepto</label><input type="text" id="egr-conc" placeholder="Descripción del gasto"></div>
-      <div class="form-field"><label>Fecha Vencimiento</label><input type="date" id="egr-venc"></div>
-      <div class="form-field"><label>Divisa</label><select id="egr-divisa"><option value="ARS">$ Pesos</option><option value="USD">U$S Dólares</option></select></div>
-      <div class="form-field"><label>Importe</label><input type="number" id="egr-importe" placeholder="0.00" step="0.01" min="0"></div>
-      <div class="form-field full-col"><label>Observaciones</label><input type="text" id="egr-obs" placeholder="Notas adicionales..."></div>
+      <div class="form-field"><label>Individuo / Entidad</label><input type="text" id="egr-ent" placeholder="Nombre o razón social" value="${item?.entidad || ''}"></div>
+      <div class="form-field"><label>Nro. Comprobante</label><input type="text" id="egr-comp" placeholder="Factura, recibo, VEP, etc." value="${item?.nro_comprobante || ''}"></div>
+      <div class="form-field"><label>Concepto</label><input type="text" id="egr-conc" placeholder="Descripción del gasto" value="${item?.concepto || ''}"></div>
+      <div class="form-field"><label>Fecha Vencimiento</label><input type="date" id="egr-venc" value="${item?.fecha_vencimiento || ''}"></div>
+      <div class="form-field"><label>Divisa</label><select id="egr-divisa">
+        <option value="ARS" ${item?.divisa === 'ARS' ? 'selected' : ''}>$ Pesos</option>
+        <option value="USD" ${item?.divisa === 'USD' ? 'selected' : ''}>U$S Dólares</option>
+      </select></div>
+      <div class="form-field"><label>Importe</label><input type="number" id="egr-importe" placeholder="0.00" step="0.01" min="0" value="${item?.importe ?? ''}"></div>
+      <div class="form-field full-col"><label>Observaciones</label><input type="text" id="egr-obs" placeholder="Notas adicionales..." value="${item?.observaciones || ''}"></div>
+      ${isEdit ? `<div class="form-field"><label>Estado</label><select id="egr-abonado-sel">
+        <option value="false" ${!item.abonado ? 'selected' : ''}>Pendiente</option>
+        <option value="true" ${item.abonado ? 'selected' : ''}>Abonado</option>
+      </select></div>` : ''}
     </div>
     <div class="form-actions">
       <button class="btn btn-teal" id="save-egr-btn"><i class="ti ti-check"></i> Guardar</button>
@@ -105,7 +122,7 @@ function openEgrModal() {
     const venc = document.getElementById('egr-venc').value
     if (!entidad) { toast('Ingresá la entidad', true); return }
     const d = venc ? new Date(venc) : new Date()
-    const { error } = await supabase.from('egrs').insert({
+    const payload = {
       entidad,
       nro_comprobante: document.getElementById('egr-comp').value,
       concepto: document.getElementById('egr-conc').value,
@@ -113,11 +130,18 @@ function openEgrModal() {
       divisa: document.getElementById('egr-divisa').value,
       importe,
       observaciones: document.getElementById('egr-obs').value,
-      abonado: false,
       mes: d.getMonth(), anio: d.getFullYear()
-    })
+    }
+    if (isEdit) {
+      payload.abonado = document.getElementById('egr-abonado-sel').value === 'true'
+    } else {
+      payload.abonado = false
+    }
+    const { error } = isEdit
+      ? await supabase.from('egrs').update(payload).eq('id', item.id)
+      : await supabase.from('egrs').insert(payload)
     if (error) { toast('Error al guardar', true); return }
-    closeModal(); toast('Egreso guardado ✓'); renderEgresosContent()
+    closeModal(); toast(isEdit ? 'Egreso actualizado ✓' : 'Egreso guardado ✓'); renderEgresosContent()
   })
 }
 

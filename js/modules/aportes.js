@@ -58,7 +58,10 @@ async function renderContent() {
         <td>${a.concepto || 'Aporte de Capital'}</td>
         <td><span class="tag tag-gray">${a.divisa || 'ARS'}</span></td>
         <td style="font-weight:700;color:var(--teal-dark)">${fmt(a.importe, a.divisa)}</td>
-        ${canEdit(currentRole) ? `<td><button class="btn btn-danger btn-sm delete-aporte" data-id="${a.id}"><i class="ti ti-trash"></i></button></td>` : ''}
+        ${canEdit(currentRole) ? `<td style="white-space:nowrap">
+          <button class="btn btn-ghost btn-sm edit-aporte" data-id="${a.id}"><i class="ti ti-pencil"></i></button>
+          <button class="btn btn-danger btn-sm delete-aporte" data-id="${a.id}"><i class="ti ti-trash"></i></button>
+        </td>` : ''}
       </tr>`).join('') : `<tr><td colspan="6" style="text-align:center;color:var(--text3);padding:24px">Sin aportes este período</td></tr>`}
       </tbody>
     </table></div></div>`
@@ -72,6 +75,12 @@ async function renderContent() {
   document.querySelectorAll('.month-btn').forEach(btn => {
     btn.addEventListener('click', () => { currentMonth = parseInt(btn.dataset.m); renderContent() })
   })
+  document.querySelectorAll('.edit-aporte').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const item = list.find(a => a.id === btn.dataset.id)
+      if (item) openAporteModal(item)
+    })
+  })
   document.querySelectorAll('.delete-aporte').forEach(btn => {
     btn.addEventListener('click', async () => {
       if (!confirm('¿Eliminar este aporte?')) return
@@ -82,14 +91,18 @@ async function renderContent() {
   })
 }
 
-function openAporteModal() {
-  document.getElementById('modal-title').textContent = 'Nuevo Aporte de Socio'
+function openAporteModal(item = null) {
+  const isEdit = !!item
+  document.getElementById('modal-title').textContent = isEdit ? 'Editar Aporte de Socio' : 'Nuevo Aporte de Socio'
   document.getElementById('modal-body').innerHTML = `
     <div class="form-grid">
-      <div class="form-field"><label>Fecha Transferencia</label><input type="date" id="ap-fecha" value="${today()}"></div>
-      <div class="form-field"><label>Socio</label><input type="text" id="ap-socio" placeholder="Nombre del socio"></div>
-      <div class="form-field"><label>Divisa</label><select id="ap-divisa"><option value="ARS">$ Pesos</option><option value="USD">U$S Dólares</option></select></div>
-      <div class="form-field"><label>Importe</label><input type="number" id="ap-importe" placeholder="0.00" step="0.01" min="0"></div>
+      <div class="form-field"><label>Fecha Transferencia</label><input type="date" id="ap-fecha" value="${item?.fecha || today()}"></div>
+      <div class="form-field"><label>Socio</label><input type="text" id="ap-socio" placeholder="Nombre del socio" value="${item?.socio || ''}"></div>
+      <div class="form-field"><label>Divisa</label><select id="ap-divisa">
+        <option value="ARS" ${item?.divisa === 'ARS' ? 'selected' : ''}>$ Pesos</option>
+        <option value="USD" ${item?.divisa === 'USD' ? 'selected' : ''}>U$S Dólares</option>
+      </select></div>
+      <div class="form-field"><label>Importe</label><input type="number" id="ap-importe" placeholder="0.00" step="0.01" min="0" value="${item?.importe ?? ''}"></div>
     </div>
     <div class="form-actions">
       <button class="btn btn-teal" id="save-aporte-btn"><i class="ti ti-check"></i> Guardar</button>
@@ -102,13 +115,16 @@ function openAporteModal() {
     const importe = parseFloat(document.getElementById('ap-importe').value) || 0
     if (!fecha || !socio || !importe) { toast('Completá todos los campos', true); return }
     const d = new Date(fecha)
-    const { error } = await supabase.from('aportes_socios').insert({
+    const payload = {
       fecha, socio, divisa: document.getElementById('ap-divisa').value,
       importe, concepto: 'Aporte de Capital',
       mes: d.getMonth(), anio: d.getFullYear()
-    })
+    }
+    const { error } = isEdit
+      ? await supabase.from('aportes_socios').update(payload).eq('id', item.id)
+      : await supabase.from('aportes_socios').insert(payload)
     if (error) { toast('Error al guardar', true); return }
-    closeModal(); toast('Aporte registrado ✓'); renderContent()
+    closeModal(); toast(isEdit ? 'Aporte actualizado ✓' : 'Aporte registrado ✓'); renderContent()
   })
 }
 

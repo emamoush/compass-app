@@ -66,9 +66,9 @@ async function renderMovimientos() {
     const q = e.target.value.toLowerCase()
     const filtered = list.filter(m => m.cliente_nombre?.toLowerCase().includes(q) || m.nro_factura?.toLowerCase().includes(q))
     document.getElementById('cli-tbody').innerHTML = renderTable(filtered)
-    attachDeleteCli()
+    attachRowHandlers(list)
   })
-  attachDeleteCli()
+  attachRowHandlers(list)
 }
 
 function renderTable(list) {
@@ -84,12 +84,21 @@ function renderTable(list) {
       <td>${m.prepago ? fmt(m.prepago, m.divisa) : '—'}</td>
       <td><span class="tag tag-blue">${m.medio_pago || '—'}</span></td>
       <td style="font-weight:700;color:${saldo <= 0 ? 'var(--green)' : 'var(--red)'}">${fmt(saldo, m.divisa)}</td>
-      ${canEdit(currentRole) ? `<td><button class="btn btn-danger btn-sm delete-cli" data-id="${m.id}"><i class="ti ti-trash"></i></button></td>` : ''}
+      ${canEdit(currentRole) ? `<td style="white-space:nowrap">
+        <button class="btn btn-ghost btn-sm edit-cli" data-id="${m.id}"><i class="ti ti-pencil"></i></button>
+        <button class="btn btn-danger btn-sm delete-cli" data-id="${m.id}"><i class="ti ti-trash"></i></button>
+      </td>` : ''}
     </tr>`
   }).join('')
 }
 
-function attachDeleteCli() {
+function attachRowHandlers(list) {
+  document.querySelectorAll('.edit-cli').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const item = list.find(m => m.id === btn.dataset.id)
+      if (item) openMovModal(item)
+    })
+  })
   document.querySelectorAll('.delete-cli').forEach(btn => {
     btn.addEventListener('click', async () => {
       if (!confirm('¿Eliminar este movimiento?')) return
@@ -108,25 +117,49 @@ async function renderBase() {
   cont.innerHTML = `
     ${canEdit(currentRole) ? `<div style="margin-bottom:16px"><button class="btn btn-teal" id="btn-new-cliente-db"><i class="ti ti-user-plus"></i> Agregar cliente</button></div>` : ''}
     <div class="card"><div class="table-wrap"><table>
-      <thead><tr><th>Razón Social</th><th>CUIT</th><th>Email</th><th>Teléfono</th><th>Observaciones</th></tr></thead>
-      <tbody>${list.length ? list.map(c => `<tr><td style="font-weight:500">${c.razon_social}</td><td>${c.cuit || '—'}</td><td>${c.email || '—'}</td><td>${c.telefono || '—'}</td><td>${c.observaciones || '—'}</td></tr>`).join('') : `<tr><td colspan="5" style="text-align:center;color:var(--text3);padding:24px">Sin clientes en la base</td></tr>`}
+      <thead><tr><th>Razón Social</th><th>CUIT</th><th>Email</th><th>Teléfono</th><th>Observaciones</th>${canEdit(currentRole) ? '<th></th>' : ''}</tr></thead>
+      <tbody>${list.length ? list.map(c => `<tr>
+        <td style="font-weight:500">${c.razon_social}</td><td>${c.cuit || '—'}</td><td>${c.email || '—'}</td><td>${c.telefono || '—'}</td><td>${c.observaciones || '—'}</td>
+        ${canEdit(currentRole) ? `<td style="white-space:nowrap">
+          <button class="btn btn-ghost btn-sm edit-cli-db" data-id="${c.id}"><i class="ti ti-pencil"></i></button>
+          <button class="btn btn-danger btn-sm delete-cli-db" data-id="${c.id}"><i class="ti ti-trash"></i></button>
+        </td>` : ''}
+      </tr>`).join('') : `<tr><td colspan="6" style="text-align:center;color:var(--text3);padding:24px">Sin clientes en la base</td></tr>`}
       </tbody>
     </table></div></div>`
   document.getElementById('btn-new-cliente-db')?.addEventListener('click', () => openClienteDBModal())
+  document.querySelectorAll('.edit-cli-db').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const item = list.find(c => c.id === btn.dataset.id)
+      if (item) openClienteDBModal(item)
+    })
+  })
+  document.querySelectorAll('.delete-cli-db').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      if (!confirm('¿Eliminar este cliente de la base?')) return
+      const { error } = await supabase.from('clientes_db').delete().eq('id', btn.dataset.id)
+      if (error) { toast('Error al eliminar', true); return }
+      toast('Eliminado ✓'); renderBase()
+    })
+  })
 }
 
-function openMovModal() {
-  document.getElementById('modal-title').textContent = 'Nuevo Movimiento de Cliente'
+function openMovModal(item = null) {
+  const isEdit = !!item
+  document.getElementById('modal-title').textContent = isEdit ? 'Editar Movimiento de Cliente' : 'Nuevo Movimiento de Cliente'
   document.getElementById('modal-body').innerHTML = `
     <div class="form-grid">
-      <div class="form-field"><label>Fecha Factura</label><input type="date" id="cli-fecha" value="${today()}"></div>
-      <div class="form-field"><label>Nro. Factura</label><input type="text" id="cli-nrofac" placeholder="0001-00012345"></div>
-      <div class="form-field"><label>Cliente</label><input type="text" id="cli-nombre" placeholder="Razón social o nombre"></div>
-      <div class="form-field"><label>Divisa</label><select id="cli-divisa"><option value="ARS">$ Pesos</option><option value="USD">U$S Dólares</option></select></div>
-      <div class="form-field"><label>Importe Total</label><input type="number" id="cli-importe" placeholder="0.00" step="0.01" min="0"></div>
-      <div class="form-field"><label>Importe Abonado</label><input type="number" id="cli-abonado" placeholder="0.00" step="0.01" min="0"></div>
-      <div class="form-field"><label>Prepago / Anticipo</label><input type="number" id="cli-prepago" placeholder="0.00" step="0.01" min="0"></div>
-      <div class="form-field"><label>Medio de Pago</label><select id="cli-medio">${MEDIOS_PAGO.map(m => `<option>${m}</option>`).join('')}</select></div>
+      <div class="form-field"><label>Fecha Factura</label><input type="date" id="cli-fecha" value="${item?.fecha_factura || today()}"></div>
+      <div class="form-field"><label>Nro. Factura</label><input type="text" id="cli-nrofac" placeholder="0001-00012345" value="${item?.nro_factura || ''}"></div>
+      <div class="form-field"><label>Cliente</label><input type="text" id="cli-nombre" placeholder="Razón social o nombre" value="${item?.cliente_nombre || ''}"></div>
+      <div class="form-field"><label>Divisa</label><select id="cli-divisa">
+        <option value="ARS" ${item?.divisa === 'ARS' ? 'selected' : ''}>$ Pesos</option>
+        <option value="USD" ${item?.divisa === 'USD' ? 'selected' : ''}>U$S Dólares</option>
+      </select></div>
+      <div class="form-field"><label>Importe Total</label><input type="number" id="cli-importe" placeholder="0.00" step="0.01" min="0" value="${item?.importe ?? ''}"></div>
+      <div class="form-field"><label>Importe Abonado</label><input type="number" id="cli-abonado" placeholder="0.00" step="0.01" min="0" value="${item?.importe_abonado ?? ''}"></div>
+      <div class="form-field"><label>Prepago / Anticipo</label><input type="number" id="cli-prepago" placeholder="0.00" step="0.01" min="0" value="${item?.prepago ?? ''}"></div>
+      <div class="form-field"><label>Medio de Pago</label><select id="cli-medio">${MEDIOS_PAGO.map(m => `<option ${item?.medio_pago === m ? 'selected' : ''}>${m}</option>`).join('')}</select></div>
     </div>
     <div class="form-actions">
       <button class="btn btn-teal" id="save-cli-btn"><i class="ti ti-check"></i> Guardar</button>
@@ -139,7 +172,7 @@ function openMovModal() {
     const importe = parseFloat(document.getElementById('cli-importe').value) || 0
     if (!fecha || !nombre) { toast('Completá fecha y cliente', true); return }
     const d = new Date(fecha)
-    const { error } = await supabase.from('clientes_movimientos').insert({
+    const payload = {
       cliente_nombre: nombre,
       fecha_factura: fecha,
       nro_factura: document.getElementById('cli-nrofac').value,
@@ -149,21 +182,25 @@ function openMovModal() {
       prepago: parseFloat(document.getElementById('cli-prepago').value) || 0,
       medio_pago: document.getElementById('cli-medio').value,
       mes: d.getMonth(), anio: d.getFullYear()
-    })
+    }
+    const { error } = isEdit
+      ? await supabase.from('clientes_movimientos').update(payload).eq('id', item.id)
+      : await supabase.from('clientes_movimientos').insert(payload)
     if (error) { toast('Error al guardar', true); return }
-    closeModal(); toast('Movimiento guardado ✓'); renderMovimientos()
+    closeModal(); toast(isEdit ? 'Movimiento actualizado ✓' : 'Movimiento guardado ✓'); renderMovimientos()
   })
 }
 
-function openClienteDBModal() {
-  document.getElementById('modal-title').textContent = 'Agregar Cliente a la Base'
+function openClienteDBModal(item = null) {
+  const isEdit = !!item
+  document.getElementById('modal-title').textContent = isEdit ? 'Editar Cliente' : 'Agregar Cliente a la Base'
   document.getElementById('modal-body').innerHTML = `
     <div class="form-grid">
-      <div class="form-field"><label>Razón Social</label><input type="text" id="cdb-nombre"></div>
-      <div class="form-field"><label>CUIT</label><input type="text" id="cdb-cuit" placeholder="XX-XXXXXXXX-X"></div>
-      <div class="form-field"><label>Email</label><input type="email" id="cdb-email"></div>
-      <div class="form-field"><label>Teléfono</label><input type="text" id="cdb-tel"></div>
-      <div class="form-field full-col"><label>Observaciones</label><input type="text" id="cdb-obs"></div>
+      <div class="form-field"><label>Razón Social</label><input type="text" id="cdb-nombre" value="${item?.razon_social || ''}"></div>
+      <div class="form-field"><label>CUIT</label><input type="text" id="cdb-cuit" placeholder="XX-XXXXXXXX-X" value="${item?.cuit || ''}"></div>
+      <div class="form-field"><label>Email</label><input type="email" id="cdb-email" value="${item?.email || ''}"></div>
+      <div class="form-field"><label>Teléfono</label><input type="text" id="cdb-tel" value="${item?.telefono || ''}"></div>
+      <div class="form-field full-col"><label>Observaciones</label><input type="text" id="cdb-obs" value="${item?.observaciones || ''}"></div>
     </div>
     <div class="form-actions">
       <button class="btn btn-teal" id="save-cdb-btn"><i class="ti ti-check"></i> Guardar</button>
@@ -173,9 +210,12 @@ function openClienteDBModal() {
   document.getElementById('save-cdb-btn').addEventListener('click', async () => {
     const nombre = document.getElementById('cdb-nombre').value
     if (!nombre) { toast('Ingresá la razón social', true); return }
-    const { error } = await supabase.from('clientes_db').insert({ razon_social: nombre, cuit: document.getElementById('cdb-cuit').value, email: document.getElementById('cdb-email').value, telefono: document.getElementById('cdb-tel').value, observaciones: document.getElementById('cdb-obs').value })
+    const payload = { razon_social: nombre, cuit: document.getElementById('cdb-cuit').value, email: document.getElementById('cdb-email').value, telefono: document.getElementById('cdb-tel').value, observaciones: document.getElementById('cdb-obs').value }
+    const { error } = isEdit
+      ? await supabase.from('clientes_db').update(payload).eq('id', item.id)
+      : await supabase.from('clientes_db').insert(payload)
     if (error) { toast('Error al guardar', true); return }
-    closeModal(); toast('Cliente agregado ✓'); renderBase()
+    closeModal(); toast(isEdit ? 'Cliente actualizado ✓' : 'Cliente agregado ✓'); renderBase()
   })
 }
 

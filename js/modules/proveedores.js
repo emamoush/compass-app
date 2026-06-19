@@ -93,7 +93,10 @@ function renderTable(list) {
       ? `<button class="abonado-btn ${m.abonado ? 'done' : ''} toggle-abonado" data-id="${m.id}" data-val="${m.abonado}">${m.abonado ? '✓ Abonado' : 'Marcar abonado'}</button>`
       : `<span class="tag ${m.abonado ? 'tag-green' : 'tag-amber'}">${m.abonado ? 'Abonado' : 'Pendiente'}</span>`
     }</td>
-    ${canEdit(currentRole) ? `<td><button class="btn btn-danger btn-sm delete-prov" data-id="${m.id}"><i class="ti ti-trash"></i></button></td>` : ''}
+    ${canEdit(currentRole) ? `<td style="white-space:nowrap">
+      <button class="btn btn-ghost btn-sm edit-prov" data-id="${m.id}"><i class="ti ti-pencil"></i></button>
+      <button class="btn btn-danger btn-sm delete-prov" data-id="${m.id}"><i class="ti ti-trash"></i></button>
+    </td>` : ''}
   </tr>`).join('')
 }
 
@@ -105,6 +108,12 @@ function attachHandlers(list) {
       if (error) { toast('Error al actualizar', true); return }
       toast(newVal ? 'Marcado como abonado ✓' : 'Marcado como pendiente')
       renderFacturas()
+    })
+  })
+  document.querySelectorAll('.edit-prov').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const item = list.find(m => m.id === btn.dataset.id)
+      if (item) openProvModal(item)
     })
   })
   document.querySelectorAll('.delete-prov').forEach(btn => {
@@ -125,25 +134,53 @@ async function renderBase() {
   cont.innerHTML = `
     ${canEdit(currentRole) ? `<div style="margin-bottom:16px"><button class="btn btn-teal" id="btn-new-prov-db"><i class="ti ti-building-store"></i> Agregar proveedor</button></div>` : ''}
     <div class="card"><div class="table-wrap"><table>
-      <thead><tr><th>Razón Social</th><th>CUIT</th><th>Email</th><th>Teléfono</th><th>Observaciones</th></tr></thead>
-      <tbody>${list.length ? list.map(p => `<tr><td style="font-weight:500">${p.razon_social}</td><td>${p.cuit || '—'}</td><td>${p.email || '—'}</td><td>${p.telefono || '—'}</td><td>${p.observaciones || '—'}</td></tr>`).join('') : `<tr><td colspan="5" style="text-align:center;color:var(--text3);padding:24px">Sin proveedores en la base</td></tr>`}
+      <thead><tr><th>Razón Social</th><th>CUIT</th><th>Email</th><th>Teléfono</th><th>Observaciones</th>${canEdit(currentRole) ? '<th></th>' : ''}</tr></thead>
+      <tbody>${list.length ? list.map(p => `<tr>
+        <td style="font-weight:500">${p.razon_social}</td><td>${p.cuit || '—'}</td><td>${p.email || '—'}</td><td>${p.telefono || '—'}</td><td>${p.observaciones || '—'}</td>
+        ${canEdit(currentRole) ? `<td style="white-space:nowrap">
+          <button class="btn btn-ghost btn-sm edit-prov-db" data-id="${p.id}"><i class="ti ti-pencil"></i></button>
+          <button class="btn btn-danger btn-sm delete-prov-db" data-id="${p.id}"><i class="ti ti-trash"></i></button>
+        </td>` : ''}
+      </tr>`).join('') : `<tr><td colspan="6" style="text-align:center;color:var(--text3);padding:24px">Sin proveedores en la base</td></tr>`}
       </tbody>
     </table></div></div>`
   document.getElementById('btn-new-prov-db')?.addEventListener('click', () => openProvDBModal())
+  document.querySelectorAll('.edit-prov-db').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const item = list.find(p => p.id === btn.dataset.id)
+      if (item) openProvDBModal(item)
+    })
+  })
+  document.querySelectorAll('.delete-prov-db').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      if (!confirm('¿Eliminar este proveedor de la base?')) return
+      const { error } = await supabase.from('proveedores_db').delete().eq('id', btn.dataset.id)
+      if (error) { toast('Error al eliminar', true); return }
+      toast('Eliminado ✓'); renderBase()
+    })
+  })
 }
 
-function openProvModal() {
-  document.getElementById('modal-title').textContent = 'Nueva Factura de Proveedor'
+function openProvModal(item = null) {
+  const isEdit = !!item
+  document.getElementById('modal-title').textContent = isEdit ? 'Editar Factura de Proveedor' : 'Nueva Factura de Proveedor'
   document.getElementById('modal-body').innerHTML = `
     <div class="form-grid">
-      <div class="form-field"><label>Fecha Factura</label><input type="date" id="prov-fecha" value="${today()}"></div>
-      <div class="form-field"><label>Nro. Factura</label><input type="text" id="prov-nrofac" placeholder="0001-00012345"></div>
-      <div class="form-field"><label>Proveedor</label><input type="text" id="prov-nombre" placeholder="Razón social"></div>
-      <div class="form-field"><label>Importe</label><input type="number" id="prov-importe" placeholder="0.00" step="0.01" min="0"></div>
-      <div class="form-field"><label>Divisa</label><select id="prov-divisa"><option value="ARS">$ Pesos</option><option value="USD">U$S Dólares</option></select></div>
-      <div class="form-field"><label>Fecha Vencimiento</label><input type="date" id="prov-venc"></div>
-      <div class="form-field"><label>Forma de Pago</label><select id="prov-forma">${MEDIOS_PAGO.map(m => `<option>${m}</option>`).join('')}</select></div>
-      <div class="form-field"><label>Importe Abonado</label><input type="number" id="prov-abonado" placeholder="0.00" step="0.01" min="0"></div>
+      <div class="form-field"><label>Fecha Factura</label><input type="date" id="prov-fecha" value="${item?.fecha_factura || today()}"></div>
+      <div class="form-field"><label>Nro. Factura</label><input type="text" id="prov-nrofac" placeholder="0001-00012345" value="${item?.nro_factura || ''}"></div>
+      <div class="form-field"><label>Proveedor</label><input type="text" id="prov-nombre" placeholder="Razón social" value="${item?.proveedor_nombre || ''}"></div>
+      <div class="form-field"><label>Importe</label><input type="number" id="prov-importe" placeholder="0.00" step="0.01" min="0" value="${item?.importe ?? ''}"></div>
+      <div class="form-field"><label>Divisa</label><select id="prov-divisa">
+        <option value="ARS" ${item?.divisa === 'ARS' ? 'selected' : ''}>$ Pesos</option>
+        <option value="USD" ${item?.divisa === 'USD' ? 'selected' : ''}>U$S Dólares</option>
+      </select></div>
+      <div class="form-field"><label>Fecha Vencimiento</label><input type="date" id="prov-venc" value="${item?.fecha_vencimiento || ''}"></div>
+      <div class="form-field"><label>Forma de Pago</label><select id="prov-forma">${MEDIOS_PAGO.map(m => `<option ${item?.forma_pago === m ? 'selected' : ''}>${m}</option>`).join('')}</select></div>
+      <div class="form-field"><label>Importe Abonado</label><input type="number" id="prov-abonado" placeholder="0.00" step="0.01" min="0" value="${item?.importe_abonado ?? ''}"></div>
+      ${isEdit ? `<div class="form-field"><label>Estado</label><select id="prov-abonado-sel">
+        <option value="false" ${!item.abonado ? 'selected' : ''}>Pendiente</option>
+        <option value="true" ${item.abonado ? 'selected' : ''}>Abonado</option>
+      </select></div>` : ''}
     </div>
     <div class="form-actions">
       <button class="btn btn-teal" id="save-prov-btn"><i class="ti ti-check"></i> Guardar</button>
@@ -156,7 +193,7 @@ function openProvModal() {
     const importe = parseFloat(document.getElementById('prov-importe').value) || 0
     if (!fecha || !nombre) { toast('Completá fecha y proveedor', true); return }
     const d = new Date(fecha)
-    const { error } = await supabase.from('proveedores_movimientos').insert({
+    const payload = {
       proveedor_nombre: nombre,
       fecha_factura: fecha,
       nro_factura: document.getElementById('prov-nrofac').value,
@@ -165,23 +202,31 @@ function openProvModal() {
       fecha_vencimiento: document.getElementById('prov-venc').value || null,
       forma_pago: document.getElementById('prov-forma').value,
       importe_abonado: parseFloat(document.getElementById('prov-abonado').value) || 0,
-      abonado: false,
       mes: d.getMonth(), anio: d.getFullYear()
-    })
+    }
+    if (isEdit) {
+      payload.abonado = document.getElementById('prov-abonado-sel').value === 'true'
+    } else {
+      payload.abonado = false
+    }
+    const { error } = isEdit
+      ? await supabase.from('proveedores_movimientos').update(payload).eq('id', item.id)
+      : await supabase.from('proveedores_movimientos').insert(payload)
     if (error) { toast('Error al guardar', true); return }
-    closeModal(); toast('Factura guardada ✓'); renderFacturas()
+    closeModal(); toast(isEdit ? 'Factura actualizada ✓' : 'Factura guardada ✓'); renderFacturas()
   })
 }
 
-function openProvDBModal() {
-  document.getElementById('modal-title').textContent = 'Agregar Proveedor a la Base'
+function openProvDBModal(item = null) {
+  const isEdit = !!item
+  document.getElementById('modal-title').textContent = isEdit ? 'Editar Proveedor' : 'Agregar Proveedor a la Base'
   document.getElementById('modal-body').innerHTML = `
     <div class="form-grid">
-      <div class="form-field"><label>Razón Social</label><input type="text" id="pdb-nombre"></div>
-      <div class="form-field"><label>CUIT</label><input type="text" id="pdb-cuit" placeholder="XX-XXXXXXXX-X"></div>
-      <div class="form-field"><label>Email</label><input type="email" id="pdb-email"></div>
-      <div class="form-field"><label>Teléfono</label><input type="text" id="pdb-tel"></div>
-      <div class="form-field full-col"><label>Observaciones</label><input type="text" id="pdb-obs"></div>
+      <div class="form-field"><label>Razón Social</label><input type="text" id="pdb-nombre" value="${item?.razon_social || ''}"></div>
+      <div class="form-field"><label>CUIT</label><input type="text" id="pdb-cuit" placeholder="XX-XXXXXXXX-X" value="${item?.cuit || ''}"></div>
+      <div class="form-field"><label>Email</label><input type="email" id="pdb-email" value="${item?.email || ''}"></div>
+      <div class="form-field"><label>Teléfono</label><input type="text" id="pdb-tel" value="${item?.telefono || ''}"></div>
+      <div class="form-field full-col"><label>Observaciones</label><input type="text" id="pdb-obs" value="${item?.observaciones || ''}"></div>
     </div>
     <div class="form-actions">
       <button class="btn btn-teal" id="save-pdb-btn"><i class="ti ti-check"></i> Guardar</button>
@@ -191,9 +236,12 @@ function openProvDBModal() {
   document.getElementById('save-pdb-btn').addEventListener('click', async () => {
     const nombre = document.getElementById('pdb-nombre').value
     if (!nombre) { toast('Ingresá la razón social', true); return }
-    const { error } = await supabase.from('proveedores_db').insert({ razon_social: nombre, cuit: document.getElementById('pdb-cuit').value, email: document.getElementById('pdb-email').value, telefono: document.getElementById('pdb-tel').value, observaciones: document.getElementById('pdb-obs').value })
+    const payload = { razon_social: nombre, cuit: document.getElementById('pdb-cuit').value, email: document.getElementById('pdb-email').value, telefono: document.getElementById('pdb-tel').value, observaciones: document.getElementById('pdb-obs').value }
+    const { error } = isEdit
+      ? await supabase.from('proveedores_db').update(payload).eq('id', item.id)
+      : await supabase.from('proveedores_db').insert(payload)
     if (error) { toast('Error al guardar', true); return }
-    closeModal(); toast('Proveedor agregado ✓'); renderBase()
+    closeModal(); toast(isEdit ? 'Proveedor actualizado ✓' : 'Proveedor agregado ✓'); renderBase()
   })
 }
 
