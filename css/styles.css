@@ -202,3 +202,10 @@ tr:last-child td{border-bottom:none;}
 /* ── TOAST ── */
 #toast{position:fixed;bottom:24px;right:24px;background:var(--navy);color:white;padding:12px 20px;border-radius:10px;font-size:14px;font-weight:500;z-index:9999;transform:translateY(20px);opacity:0;transition:all 0.22s;box-shadow:0 4px 20px rgba(0,0,0,0.2);pointer-events:none;max-width:300px;}
 #toast.error{background:var(--red);}
+
+/* ── Agregado: Facturas/Recibos (PDF options) ── */
+.pdf-options{display:flex;gap:16px;margin:8px 0 12px}
+.radio-opt{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--text2);cursor:pointer}
+.radio-opt input{margin:0;cursor:pointer}
+.hint{font-size:12px;color:var(--text3);margin-top:6px}
+.hint a{color:var(--teal-dark);text-decoration:underline}
